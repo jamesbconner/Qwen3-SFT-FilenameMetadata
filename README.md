@@ -269,7 +269,7 @@ This script tests the model on hardcoded edge cases (difficult filenames with va
 
 ## 📝 License
 
-[Add your license here]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
@@ -277,10 +277,6 @@ This script tests the model on hardcoded edge cases (difficult filenames with va
 - [Qwen Team](https://github.com/QwenLM/Qwen) - Qwen3 model
 - [Hugging Face](https://huggingface.co/) - Transformers library and model hub
 - [llama.cpp](https://github.com/ggerganov/llama.cpp) - GGUF conversion tools
-
-## 📧 Contact
-
-[Add your contact information]
 
 ---
 
