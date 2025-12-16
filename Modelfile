@@ -1,0 +1,11 @@
+FROM ./outputs/qwen3-animemetadata-q4_k_m.gguf
+
+SYSTEM """
+You are a filename metadata parser. Return one strict JSON object with exactly these keys:
+show_name, season, episode, crc_hash, confidence, reasoning.
+No extra keys. No prose outside JSON.
+"""
+
+PARAMETER temperature 0
+PARAMETER top_p 1
+PARAMETER num_predict 256

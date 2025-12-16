@@ -1,0 +1,226 @@
+# ============================================
+# Python
+# ============================================
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.pytest_cache/
+.hypothesis/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# pyenv
+.python-version
+
+# ============================================
+# Project-specific directories
+# ============================================
+# Data directories (contain large files)
+inputs/
+outputs/
+
+# Cache directories
+unsloth_compiled_cache/
+.cache/
+*.cache
+
+# ============================================
+# ML/AI specific
+# ============================================
+# Model files (too large for git)
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.pb
+*.onnx
+*.tflite
+*.gguf
+*.ggml
+
+# HuggingFace cache
+.huggingface/
+transformers_cache/
+models--*/
+
+# Checkpoints and training artifacts
+checkpoint-*/
+runs/
+wandb/
+tensorboard/
+mlruns/
+.neptune/
+
+# Dataset cache
+datasets_cache/
+*.arrow
+*.parquet
+
+# ============================================
+# IDE and editor files
+# ============================================
+# VS Code
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ============================================
+# OS-specific files
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ============================================
+# Logs and temporary files
+# ============================================
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*.orig
+*.rej
+
+# ============================================
+# Environment and secrets
+# ============================================
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.yaml
+config.local.yaml
+
+# ============================================
+# Large data files
+# ============================================
+*.csv
+*.tsv
+*.jsonl
+*.json.gz
+*.parquet
+*.feather
+*.hdf5
+*.h5
+
+# But keep small config/test files
+!tests/**/*.csv
+!tests/**/*.json
+!tests/**/*.txt
+!requirements.txt
+!pyproject.toml
+!setup.py
+
