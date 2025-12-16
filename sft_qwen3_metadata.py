@@ -405,7 +405,7 @@ def format_example(row: Dict[str, Any]) -> Dict[str, str]:
     text = (
         f"<|system|>\n{SYSTEM_PROMPT}\n"
         f"<|user|>\n{user}\n"
-        f"<|assistant|>\n{assistant}"
+        f"<|assistant|>\n{assistant}<|endoftext|>"
     )
     return {"text": text}
 
