@@ -1,4 +1,4 @@
-FROM ./outputs/qwen3-animemetadata-q4_k_m.gguf
+FROM ./outputs/qwen3-filemetadata-q4_k_m.gguf
 
 SYSTEM """
 You are a filename metadata parser. Return one strict JSON object with exactly these keys:

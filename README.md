@@ -154,21 +154,21 @@ To use the model with Ollama for local inference:
 3. **Convert to GGUF** (requires llama.cpp):
    ```bash
    python <path-to-llama.cpp>/convert_hf_to_gguf.py outputs/merged_hf_model \
-       --outfile outputs/qwen3-animemetadata-f16.gguf \
+       --outfile outputs/qwen3-filemetadata-f16.gguf \
        --outtype f16
    ```
 
 4. **Quantize** (optional, for smaller model):
    ```bash
-   <path-to-llama.cpp-binaries>/llama-quantize.exe outputs/qwen3-animemetadata-f16.gguf \
-       outputs/qwen3-animemetadata-q4_k_m.gguf Q4_K_M
+   <path-to-llama.cpp-binaries>/llama-quantize.exe outputs/qwen3-filemetadata-f16.gguf \
+       outputs/qwen3-filemetadata-q4_k_m.gguf Q4_K_M
    ```
 
-5. **Update Modelfile**: Ensure `Modelfile` points to the correct GGUF path (default: `./outputs/qwen3-animemetadata-q4_k_m.gguf`)
+5. **Update Modelfile**: Ensure `Modelfile` points to the correct GGUF path (default: `./outputs/qwen3-filemetadata-q4_k_m.gguf`)
 
 6. **Create Ollama model**:
    ```bash
-   ollama create qwen3-animemetadata -f Modelfile
+   ollama create qwen3-filemetadata -f Modelfile
    ```
 
 ## ⚙️ Configuration
