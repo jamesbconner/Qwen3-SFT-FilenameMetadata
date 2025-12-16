@@ -24,7 +24,7 @@ This project trains a large language model (Qwen3 14B) to extract structured met
 
 ### Hardware
 - **GPU**: NVIDIA GPU with CUDA support (tested on RTX 4090)
-- **VRAM**: ~24GB+ recommended for 14B model in 4-bit
+- **VRAM**: ~20GB+ recommended for 14B model in 4-bit
 - **RAM**: 16GB+ system RAM
 
 ### Software
@@ -147,7 +147,7 @@ To use the model with Ollama for local inference:
    python merge_lora_to_full_model.py
    ```
    
-   **Note**: This requires loading the full 14B model in memory (~28GB RAM/VRAM). The script loads `Qwen/Qwen3-14B` (not the quantized version) and merges the LoRA adapters into it.
+   **Note**: This requires loading the full 14B model in memory (~20GB RAM/VRAM). The script loads `Qwen/Qwen3-14B` (not the quantized version) and merges the LoRA adapters into it.
 
 2. **Download llama.cpp**: Get the latest release from [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases)
 
@@ -224,7 +224,7 @@ This script tests the model on hardcoded edge cases (difficult filenames with va
 
 ### Performance
 - **Training Time**: ~40 minutes on RTX 4090
-- **Memory Usage**: ~20-24GB VRAM
+- **Memory Usage**: ~20GB VRAM
 - **Model Size**: 
   - LoRA adapters: ~50MB
   - Merged model: ~8GB (FP16) or ~4GB (Q4_K_M quantized)
