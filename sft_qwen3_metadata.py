@@ -572,7 +572,7 @@ def compute_metrics(eval_pred: EvalPrediction, tokenizer) -> Dict[str, float]:
                 key_ok += 1
 
             checks = [
-                isinstance(pred_obj.get("show_name"), str),
+                isinstance(pred_obj.get("show_name"), str) and bool(pred_obj.get("show_name")),
                 _int_or_null(pred_obj.get("season")),
                 _int_or_null(pred_obj.get("episode")),
                 _crc_valid(pred_obj.get("crc_hash")),

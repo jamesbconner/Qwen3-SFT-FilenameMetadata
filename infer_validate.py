@@ -111,7 +111,9 @@ def build_inputs(tokenizer, system: str, user: str) -> Dict[str, torch.Tensor]:
             add_generation_prompt=True,
             return_tensors="pt",
         )
-        return {"input_ids": tokenized, "attention_mask": tokenized.ne(tokenizer.pad_token_id).long()}
+        pad_id = tokenizer.pad_token_id
+        attn_mask = torch.ones_like(tokenized, dtype=torch.long) if pad_id is None else tokenized.ne(pad_id).long()
+        return {"input_ids": tokenized, "attention_mask": attn_mask}
 
     # Fallback to manual string format (matches training).
     prompt = f"<|system|>\n{system}\n<|user|>\n{user}\n<|assistant|>\n"

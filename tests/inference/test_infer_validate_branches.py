@@ -12,6 +12,19 @@ def test_configure_logging_file(tmp_path):
     assert log_path.exists()
 
 
+def test_build_inputs_handles_missing_pad_token():
+    class Tok:
+        pad_token_id = None
+
+        def apply_chat_template(self, messages, tokenize, add_generation_prompt, return_tensors):
+            assert tokenize and add_generation_prompt and return_tensors == "pt"
+            return torch.tensor([[1, 2, 3]])
+
+    out = iv.build_inputs(Tok(), "sys", "user")
+    assert out["input_ids"].tolist() == [[1, 2, 3]]
+    assert out["attention_mask"].tolist() == [[1, 1, 1]]
+
+
 def test_load_prompts_missing_and_placeholder(tmp_path):
     sys_p = tmp_path / "sys.txt"
     usr_p = tmp_path / "usr.txt"
