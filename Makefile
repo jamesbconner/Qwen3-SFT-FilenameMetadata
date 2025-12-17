@@ -90,6 +90,8 @@ clean_outputs:
 	"
 
 zip:
-	@if not exist .git echo "git repo not found; cannot use git archive" && exit /b 1
+	@if not exist .git ( \
+		echo git repo not found; cannot use git archive & exit /b 1 \
+	)
 	git archive --format=zip --output=llm_fine_tuning.zip HEAD
 
