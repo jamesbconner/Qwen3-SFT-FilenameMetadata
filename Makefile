@@ -55,7 +55,8 @@ validate:
 	$(PYTHON) infer_validate.py
 
 merge:
-	$(PYTHON) merge_lora_to_full_model.py
+	@echo Skipping torchao and normalizing allocator settings for merge...
+	cmd /C "set TRANSFORMERS_NO_TORCHAO=1 && set PYTORCH_CUDA_ALLOC_CONF= && set PYTORCH_ALLOC_CONF=max_split_size_mb:128 && $(PYTHON) merge_lora_to_full_model.py"
 
 gguf:
 	$(PYTHON) $(LLAMACPP_CONVERT) $(MERGED_HF_DIR) --outfile $(GGUF_F16) --outtype f16
