@@ -535,24 +535,26 @@ def _crc_valid(value: Any) -> bool:
 
 def compute_metrics(eval_pred: EvalPrediction, tokenizer) -> Dict[str, float]:
     """Compute task-specific JSON correctness metrics."""
-    # Unsloth/Trainer may return logits when predict_with_generate is False.
-    # Convert logits -> token IDs via argmax when needed.
+    # Handle logits vs already-decoded strings
     preds = eval_pred.predictions
     if isinstance(preds, tuple):
         preds = preds[0]
     preds = np.array(preds)
-    if preds.ndim == 3:  # [batch, seq_len, vocab]
-        preds = np.argmax(preds, axis=-1)
-    # Ensure integer token IDs for decoding
-    preds = preds.astype(np.int64, copy=False)
+    if preds.dtype.kind in {"U", "S", "O"}:  # already decoded strings
+        preds_text = preds.tolist()
+    else:
+        if preds.ndim == 3:  # [batch, seq_len, vocab]
+            preds = np.argmax(preds, axis=-1)
+        preds = preds.astype(np.int64, copy=False)
+        preds_text = tokenizer.batch_decode(preds, skip_special_tokens=True)
 
-    # Replace ignore_index (-100) in labels so decoding works
     label_ids = np.array(eval_pred.label_ids)
-    if tokenizer.pad_token_id is not None:
-        label_ids = np.where(label_ids == -100, tokenizer.pad_token_id, label_ids)
-
-    preds_text = tokenizer.batch_decode(preds, skip_special_tokens=True)
-    labels = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
+    if label_ids.dtype.kind in {"U", "S", "O"}:
+        labels = label_ids.tolist()
+    else:
+        if tokenizer.pad_token_id is not None:
+            label_ids = np.where(label_ids == -100, tokenizer.pad_token_id, label_ids)
+        labels = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
 
     total = len(preds_text) or 1  # avoid division by zero
     json_valid = key_ok = type_ok = ep_present = crc_ok = exact = 0
