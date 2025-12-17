@@ -552,8 +552,10 @@ def compute_metrics(eval_pred: EvalPrediction, tokenizer) -> Dict[str, float]:
     if label_ids.dtype.kind in {"U", "S", "O"}:
         labels = label_ids.tolist()
     else:
-        if tokenizer.pad_token_id is not None:
-            label_ids = np.where(label_ids == -100, tokenizer.pad_token_id, label_ids)
+        pad_id = getattr(tokenizer, "pad_token_id", None)
+        eos_id = getattr(tokenizer, "eos_token_id", None)
+        replacement_id = pad_id if pad_id is not None else (eos_id if eos_id is not None else 0)
+        label_ids = np.where(label_ids == -100, replacement_id, label_ids)
         labels = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
 
     total = len(preds_text) or 1  # avoid division by zero

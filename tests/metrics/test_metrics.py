@@ -75,3 +75,25 @@ def test_compute_metrics_partial_failures():
     assert metrics["crc_format"] == 0.0
     assert metrics["exact_json_match"] == 0.0
 
+
+def test_compute_metrics_no_pad_token_replaces_ignore_index():
+    pred = '{"show_name":"A","season":1,"episode":2,"crc_hash":"ABCDEF12","confidence":0.9,"reasoning":"ok"}'
+
+    class NoPadTok:
+        pad_token_id = None
+        eos_token_id = 1
+
+        def batch_decode(self, sequences, skip_special_tokens: bool = True):
+            if isinstance(sequences, np.ndarray):
+                sequences = sequences.tolist()
+            for seq in sequences:
+                if any(x == -100 for x in seq):
+                    raise AssertionError("ignore index not replaced")
+            return [pred for _ in sequences]
+
+    eval_pred = EvalPrediction(
+        predictions=np.array([pred]),
+        label_ids=np.array([[-100, 65, -100]]),
+    )
+    metrics = compute_metrics(eval_pred, NoPadTok())
+    assert all(value == 1.0 for value in metrics.values())
