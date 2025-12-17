@@ -8,14 +8,14 @@ PIP         ?= .venv\\Scripts\\pip.exe
 TORCH_INDEX ?= https://download.pytorch.org/whl/cu128
 
 # llama.cpp paths (set these to your local install)
-LLAMACPP_CONVERT ?= D:/Languages/llama/llama.cpp-b7415/convert_hf_to_gguf.py
-LLAMACPP_QUANT   ?= D:/Languages/llama/llama-b7415-bin-win-cuda-12.4-x64/llama-quantize.exe
+LLAMACPP_CONVERT ?= D:\\Languages\\llama\\llama.cpp-b7415\\convert_hf_to_gguf.py
+LLAMACPP_QUANT   ?= D:\\Languages\\llama\\llama-b7415-bin-win-cuda-12.4-x64\\llama-quantize.exe
 
 # Model/output paths
-MERGED_HF_DIR    ?= outputs/merged_hf_model
-SFT_OUTPUT_DIR   ?= outputs/sft_model
-GGUF_F16         ?= outputs/qwen3-filemetadata-f16.gguf
-GGUF_Q4          ?= outputs/qwen3-filemetadata-q4_k_m.gguf
+MERGED_HF_DIR    ?= outputs\\merged_hf_model
+SFT_OUTPUT_DIR   ?= outputs\\sft_model
+GGUF_F16         ?= outputs\\qwen3-filemetadata-f16.gguf
+GGUF_Q4          ?= outputs\\qwen3-filemetadata-q4_k_m.gguf
 MODEFILE_PATH    ?= Modelfile
 
 # -------- Phony targets --------
@@ -49,7 +49,7 @@ install: venv
 
 train:
 	@echo Setting CUDA debug env and running training...
-	cmd /C "set CUDA_LAUNCH_BLOCKING=1 && set PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128 && $(PYTHON) sft_qwen3_metadata.py"
+	cmd /C "set CUDA_LAUNCH_BLOCKING=1 && set PYTORCH_CUDA_ALLOC_CONF= && set PYTORCH_ALLOC_CONF=max_split_size_mb:128 && $(PYTHON) sft_qwen3_metadata.py"
 
 validate:
 	$(PYTHON) infer_validate.py
@@ -59,7 +59,7 @@ merge:
 	cmd /C "set TRANSFORMERS_NO_TORCHAO=1 && set PYTORCH_CUDA_ALLOC_CONF= && set PYTORCH_ALLOC_CONF=max_split_size_mb:128 && $(PYTHON) merge_lora_to_full_model.py"
 
 gguf:
-	$(PYTHON) $(LLAMACPP_CONVERT) $(MERGED_HF_DIR) --outfile $(GGUF_F16) --outtype f16
+	cmd /C "set PYTORCH_CUDA_ALLOC_CONF= && $(PYTHON) $(LLAMACPP_CONVERT) $(MERGED_HF_DIR) --outfile $(GGUF_F16) --outtype f16"
 
 quantize:
 	"$(LLAMACPP_QUANT)" $(GGUF_F16) $(GGUF_Q4) Q4_K_M
