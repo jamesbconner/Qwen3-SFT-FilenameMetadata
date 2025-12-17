@@ -56,8 +56,8 @@ REQUIRE_EPISODE = True
 
 # Make this smaller while debugging so you always see output fast
 MAX_NEW_TOKENS = 256
-# Stop on chat tags? Keep False by default; allow JSON to emit even if tags appear.
-STOP_ON_CHAT_TAGS = False
+# Stop on chat tags to avoid runaway chat re-entries.
+STOP_ON_CHAT_TAGS = True
 
 TEST_FILENAMES = [
     "Usagi-senpai wa īsutā no yume o mite iru - 27 (1080p).ADN.WEB-DL.AAC2.0.H.264-VARYG.[23A0FB72].mkv",
