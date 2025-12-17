@@ -58,6 +58,21 @@ def test_compute_metrics_all_pass():
     assert metrics["exact_json_match"] == 1.0
 
 
+def test_compute_metrics_skips_prompt_braces():
+    tok = DummyTokenizer()
+    body = '{"show_name":"A","season":1,"episode":2,"crc_hash":"ABCDEF12","confidence":0.9,"reasoning":"ok"}'
+    prompt = "<|system|>\nOutput schema {not json}\n<|assistant|>\n"
+    pred = prompt + body
+    label = prompt + body
+    eval_pred = EvalPrediction(
+        predictions=np.array([pred]),
+        label_ids=np.array([label]),
+    )
+    metrics = compute_metrics(eval_pred, tok)
+    assert metrics["json_validity"] == 1.0
+    assert metrics["exact_json_match"] == 1.0
+
+
 def test_compute_metrics_partial_failures():
     tok = DummyTokenizer()
     pred = '{"show_name":"A","season":null,"episode":null,"crc_hash":"BAD","confidence":1.2,"reasoning":123}'

@@ -503,30 +503,46 @@ def format_example(row: Dict[str, Any]) -> Dict[str, str]:
 # Metrics helpers
 # -----------------------
 def extract_first_balanced_json(text: str) -> Tuple[Optional[Dict[str, Any]], str]:
-    """Extract the first balanced JSON object from text."""
-    start = text.find("{")
-    if start == -1:
-        return None, "no '{'"
+    """
+    Extract the first parseable balanced JSON object from text.
 
-    depth = 0
-    end = None
-    for idx, ch in enumerate(text[start:], start=start):
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                end = idx
-                break
+    If the Qwen chat template is present, content before the <|assistant|> tag
+    is ignored so braces in the system prompt (for example, the Output schema
+    block) do not interfere. Iterates over brace starts until a valid JSON
+    object is found.
+    """
+    search_space = text
+    if "<|assistant|>" in text:
+        search_space = text.split("<|assistant|>", 1)[1]
 
-    if end is None:
-        return None, "unbalanced braces"
+    start_idx = 0
+    last_error = ""
+    while True:
+        start = search_space.find("{", start_idx)
+        if start == -1:
+            return None, last_error or "no '{'"
 
-    candidate = text[start : end + 1].strip()
-    try:
-        return json.loads(candidate), ""
-    except Exception as exc:  # noqa: BLE001
-        return None, f"json parse: {exc}"
+        depth = 0
+        end = None
+        for idx, ch in enumerate(search_space[start:], start=start):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = idx
+                    break
+
+        if end is None:
+            return None, "unbalanced braces"
+
+        candidate = search_space[start : end + 1].strip()
+        try:
+            return json.loads(candidate), ""
+        except Exception as exc:  # noqa: BLE001
+            last_error = f"json parse: {exc}"
+            start_idx = start + 1
+            continue
 
 
 def _int_or_null(value: Any) -> bool:
