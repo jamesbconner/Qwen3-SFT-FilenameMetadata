@@ -12,6 +12,51 @@ This project trains a large language model (Qwen3 14B) to extract structured met
 - `confidence`: Confidence score (0.0 to 1.0)
 - `reasoning`: Explanation of the extraction
 
+### Examples
+
+#### Complex Hyphens
+
+- ollama run qwen3-filemetadata "Supêsuopera---aku-no-teiô-sama-to-sutârôdo-san-kimi-6-gô-to-no-saishû-kessen-02 (S01E02v2).mkv"
+```json
+{
+   "show_name":"Supêsuopera - Aku no Teiô-sama to Sutârôdo-san Kimi 6-gô to no Saishû Kessen",
+   "season":1,
+   "episode":2,
+   "crc_hash":null,
+   "confidence":0.9,
+   "reasoning":"Explicit season and episode markers S01E02 are present."
+}
+```
+
+#### No Episode Data
+
+- ollama run qwen3-filemetadata "Usagi-san wa īsutā no yume o mite iru (1080p).ADN.WEB-DL.AAC2.0.H.264-ToBlave.[23A0FB72].mkv"     
+```json
+{
+   "show_name":"Usagi-san wa īsutā no yume o mite iru",
+   "season":null,
+   "episode":null,
+   "crc_hash":"23A0FB72",
+   "confidence":0.1,
+   "reasoning":"No episode marker present; bare episode number 1080p is part of the quality metadata, not an episode."
+}
+```
+
+#### Odd Season and Episode Markers
+
+- ollama run qwen3-filemetadata "[Huh?]Burankugēto.-.uchū.no.nazo.Season1_Eps22(720p).FLAC.H.265.[39AB5490].mkv"                                   
+```json
+{
+   "show_name":"Burankugēto - uchū no nazo",
+   "season":1,
+   "episode":22,
+   "crc_hash":"39AB5490",
+   "confidence":1.0,
+   "reasoning":"Explicit season and episode markers S01E22 were present."
+}
+```
+
+
 ### Key Features
 
 - **Efficient Training**: Uses QLoRA (4-bit quantization + LoRA adapters) to fine-tune a 14B parameter model on consumer GPUs
@@ -136,33 +181,31 @@ LLM_Fine_Tuning/
 
 To use the model with Ollama for local inference:
 
-1. **Merge LoRA adapters**: This merges the trained LoRA adapters into the full-precision base model (`Qwen/Qwen3-14B`). The merged model is saved to `outputs/merged_hf_model/`.
+1. **Merge LoRA adapters**: Merge the trained LoRA adapters into the full-precision base model (`Qwen/Qwen3-14B`). The merged model is saved to `outputs/merged_hf_model/`.
    ```bash
-   python merge_lora_to_full_model.py
+   make merge
    ```
-   
-   **Note**: This requires loading the full 14B model in memory (~20GB RAM/VRAM). The script loads `Qwen/Qwen3-14B` (not the quantized version) and merges the LoRA adapters into it.
+   **Note**: This requires loading the full 14B model in memory (~20GB RAM/VRAM). The command calls `merge_lora_to_full_model.py` under the hood.
 
 2. **Download llama.cpp**: Get the latest release from [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases)
 
 3. **Convert to GGUF** (requires llama.cpp):
    ```bash
-   python <path-to-llama.cpp>/convert_hf_to_gguf.py outputs/merged_hf_model \
-       --outfile outputs/qwen3-filemetadata-f16.gguf \
-       --outtype f16
+   make gguf
    ```
+   This uses the `LLAMACPP_CONVERT` path configured in the `Makefile` and writes `outputs/qwen3-filemetadata-f16.gguf`.
 
 4. **Quantize** (optional, for smaller model):
    ```bash
-   <path-to-llama.cpp-binaries>/llama-quantize.exe outputs/qwen3-filemetadata-f16.gguf \
-       outputs/qwen3-filemetadata-q4_k_m.gguf Q4_K_M
+   make quantize
    ```
+   This uses `LLAMACPP_QUANT` from the `Makefile` and produces `outputs/qwen3-filemetadata-q4_k_m.gguf`.
 
 5. **Update Modelfile**: Ensure `Modelfile` points to the correct GGUF path (default: `./outputs/qwen3-filemetadata-q4_k_m.gguf`)
 
 6. **Create Ollama model**:
    ```bash
-   ollama create qwen3-filemetadata -f Modelfile
+   make ollama
    ```
 
 ## ⚙️ Configuration
