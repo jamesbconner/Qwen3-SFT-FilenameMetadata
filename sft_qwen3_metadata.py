@@ -37,9 +37,12 @@ logging.getLogger("torch.distributed.elastic.multiprocessing.redirects").setLeve
 import unsloth  # noqa: F401
 
 import os
+import re
 import json
 import random
 import time
+import logging
+import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, List
@@ -50,10 +53,58 @@ import numpy as np
 import pandas as pd
 import torch
 from datasets import Dataset
-from transformers import TrainingArguments
+from transformers import EvalPrediction, TrainingArguments
 from trl import SFTTrainer
 
 from unsloth import FastLanguageModel, is_bfloat16_supported
+
+
+def configure_logging(name: str = "sft_train", log_file: Optional[str] = None, level: int = logging.INFO) -> logging.Logger:
+    """Configure a structured logger with optional file output."""
+    logger = logging.getLogger(name)
+    if logger.handlers:
+        return logger
+    logger.setLevel(level)
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+    sh = logging.StreamHandler()
+    sh.setFormatter(fmt)
+    logger.addHandler(sh)
+    if log_file:
+        fh = logging.FileHandler(log_file, encoding="utf-8")
+        fh.setFormatter(fmt)
+        logger.addHandler(fh)
+    return logger
+
+
+logger = configure_logging()
+
+
+def get_git_sha() -> str:
+    """Return current git SHA if available."""
+    try:
+        import subprocess
+
+        sha = (
+            subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL)
+            .decode("utf-8")
+            .strip()
+        )
+        return sha
+    except Exception:
+        return "unknown"
+
+
+def write_run_metadata(output_dir: str, cfg: "CFG") -> None:
+    """Write run metadata (git sha, timestamp, config) to output_dir/run_metadata.json."""
+    path = Path(output_dir) / "run_metadata.json"
+    payload = {
+        "git_sha": get_git_sha(),
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "config": dataclasses.asdict(cfg),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    logger.info("Wrote run metadata: %s", path)
 
 
 # -----------------------
@@ -102,6 +153,9 @@ class CFG:
     save_steps: int = 200  # Save checkpoint every N steps
     eval_steps: int = 200  # Run evaluation every N steps
     save_total_limit: int = 2  # Keep only last 2 checkpoints (saves disk space)
+    per_device_eval_batch_size: int = 1  # Eval batch (kept tiny to avoid OOM)
+    eval_accumulation_steps: int = 1  # Reduce eval memory spikes
+    eval_max_samples: Optional[int] = None  # Limit eval set size (None = full)
 
     # Performance optimizations
     packing: bool = True  # Pack multiple examples into one sequence (better GPU utilization)
@@ -156,6 +210,7 @@ SYSTEM_PROMPT, USER_TEMPLATE = load_prompts(cfg.prompt_dir, cfg.prompt_system, c
 # -----------------------
 # Expected columns in the input CSV (validated during loading)
 EXPECTED_COLS = ["name", "show_name", "season", "episode", "reasoning", "confidence", "crc_hash"]
+CRC_RE = re.compile(r"[A-F0-9]{8}")
 
 
 def _strip_outer_quotes(s: str) -> str:
@@ -303,6 +358,39 @@ def load_and_clean_csv(path: str) -> pd.DataFrame:
     return df
 
 
+def detect_data_issues(df: pd.DataFrame, max_name_len: int = 200) -> Dict[str, list[int]]:
+    """Detect potential data quality issues and return index lists for each issue type."""
+    issues: Dict[str, list[int]] = {
+        "long_filenames": [],
+        "duplicates": [],
+        "bad_crc_format": [],
+        "missing_episode": [],
+    }
+
+    # Long filenames
+    issues["long_filenames"] = df.index[df["name"].astype(str).str.len() > max_name_len].tolist()
+
+    # Duplicate names
+    issues["duplicates"] = df.index[df.duplicated(subset=["name"], keep=False)].tolist()
+
+    # Bad CRC format (when present) - require exact 8-hex full match
+    issues["bad_crc_format"] = df.index[
+        df["crc_hash"].notna() & (~df["crc_hash"].astype(str).str.fullmatch(CRC_RE))
+    ].tolist()
+
+    # Missing episode (nullable Int64, so use .isna())
+    issues["missing_episode"] = df.index[df["episode"].isna()].tolist()
+
+    return issues
+
+
+def print_data_issues(issues: Dict[str, list[int]]) -> None:
+    """Print a summary of detected data issues."""
+    logger.info("Data quality checks:")
+    for key, idxs in issues.items():
+        logger.info("  - %s: %d issue(s)", key, len(idxs))
+
+
 def print_descriptive_stats(df: pd.DataFrame) -> None:
     """
     Print comprehensive statistics about the cleaned dataset.
@@ -318,29 +406,30 @@ def print_descriptive_stats(df: pd.DataFrame) -> None:
     print("\n" + "=" * 70)
     print("Dataset sanity checks (pandas)")
     print("=" * 70)
-    print(f"[INFO] rows: {len(df)}")
-    print("[INFO] null counts:")
-    print(df.isna().sum().to_string())
+    rows_msg = f"rows: {len(df)}"
+    print(rows_msg)
+    logger.info(rows_msg)
+    null_counts_msg = f"null counts:\n{df.isna().sum().to_string()}"
+    print(null_counts_msg)
+    logger.info(null_counts_msg)
 
     # Episode distribution: show stats for non-null episodes
     # This helps identify if episodes are in a reasonable range (e.g., 1-100)
     ep = df["episode"]
     print("\n[INFO] episode stats (non-null):")
     if ep.notna().any():
-        print(ep.dropna().astype(int).describe().to_string())  # min, max, mean, etc.
-        print("\n[INFO] top 20 episode values:")
-        print(ep.dropna().astype(int).value_counts().head(20).to_string())  # Most common episodes
+        logger.info("episode describe:\n%s", ep.dropna().astype(int).describe().to_string())
+        logger.info("top 20 episode values:\n%s", ep.dropna().astype(int).value_counts().head(20).to_string())
     else:
-        print("[INFO] no non-null episodes found")
+        logger.info("no non-null episodes found")
 
     # Season coverage: what percentage of rows have season info
     se = df["season"]
     season_pct = float(se.notna().mean()) * 100.0
-    print(f"\n[INFO] season present: {season_pct:.2f}%")
+    logger.info("season present: %.2f%%", season_pct)
 
     # Confidence distribution: check if confidence scores are reasonable
-    print("\n[INFO] confidence stats:")
-    print(df["confidence"].describe().to_string())
+    logger.info("confidence stats:\n%s", df["confidence"].describe().to_string())
 
     # Quick peek at a few rows for manual inspection
     # Helps catch data quality issues early
@@ -405,9 +494,155 @@ def format_example(row: Dict[str, Any]) -> Dict[str, str]:
     text = (
         f"<|system|>\n{SYSTEM_PROMPT}\n"
         f"<|user|>\n{user}\n"
-        f"<|assistant|>\n{assistant}"
+        f"<|assistant|>\n{assistant}<|endoftext|>"
     )
     return {"text": text}
+
+
+# -----------------------
+# Metrics helpers
+# -----------------------
+def extract_first_balanced_json(text: str) -> Tuple[Optional[Dict[str, Any]], str]:
+    """
+    Extract the first parseable balanced JSON object from text.
+
+    If the Qwen chat template is present, content before the <|assistant|> tag
+    is ignored so braces in the system prompt (for example, the Output schema
+    block) do not interfere. Iterates over brace starts until a valid JSON
+    object is found.
+    """
+    search_space = text
+    if "<|assistant|>" in text:
+        search_space = text.split("<|assistant|>", 1)[1]
+
+    start_idx = 0
+    last_error = ""
+    while True:
+        start = search_space.find("{", start_idx)
+        if start == -1:
+            return None, last_error or "no '{'"
+
+        depth = 0
+        end = None
+        for idx, ch in enumerate(search_space[start:], start=start):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = idx
+                    break
+
+        if end is None:
+            return None, "unbalanced braces"
+
+        candidate = search_space[start : end + 1].strip()
+        try:
+            return json.loads(candidate), ""
+        except Exception as exc:  # noqa: BLE001
+            last_error = f"json parse: {exc}"
+            start_idx = start + 1
+            continue
+
+
+def _int_or_null(value: Any) -> bool:
+    return value is None or isinstance(value, int)
+
+
+def _crc_valid(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and CRC_RE.fullmatch(value) is not None)
+
+
+def _zero_metrics() -> Dict[str, float]:
+    """Return zeroed metric dict (used when predictions are unusable)."""
+    return {
+        "json_validity": 0.0,
+        "key_order_match": 0.0,
+        "field_type_valid": 0.0,
+        "episode_present": 0.0,
+        "crc_format": 0.0,
+        "exact_json_match": 0.0,
+    }
+
+
+def compute_metrics(eval_pred: EvalPrediction, tokenizer) -> Dict[str, float]:
+    """Compute task-specific JSON correctness metrics."""
+    # Handle logits vs already-decoded strings
+    preds = eval_pred.predictions
+    if isinstance(preds, tuple):
+        preds = preds[0]
+    preds = np.array(preds)
+
+    # Trainer/SFTTrainer without predict_with_generate returns next-token logits,
+    # which are not decodable into the desired JSON completions. Guard and emit
+    # neutral metrics instead of misleading scores.
+    if preds.size == 0:
+        return _zero_metrics()
+    if preds.ndim == 3:
+        logger.warning(
+            "compute_metrics received logits with shape %s; set predict_with_generate=True "
+            "so metrics use generated completions.",
+            preds.shape,
+        )
+        return _zero_metrics()
+
+    if preds.dtype.kind in {"U", "S", "O"}:  # already decoded strings
+        preds_text = preds.tolist()
+    else:
+        preds = preds.astype(np.int64, copy=False)
+        preds_text = tokenizer.batch_decode(preds, skip_special_tokens=True)
+
+    label_ids = np.array(eval_pred.label_ids)
+    if label_ids.dtype.kind in {"U", "S", "O"}:
+        labels = label_ids.tolist()
+    else:
+        pad_id = getattr(tokenizer, "pad_token_id", None)
+        eos_id = getattr(tokenizer, "eos_token_id", None)
+        replacement_id = pad_id if pad_id is not None else (eos_id if eos_id is not None else 0)
+        label_ids = np.where(label_ids == -100, replacement_id, label_ids)
+        labels = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
+
+    total = len(preds_text) or 1  # avoid division by zero
+    json_valid = key_ok = type_ok = ep_present = crc_ok = exact = 0
+
+    expected_output_keys = ["show_name", "season", "episode", "crc_hash", "confidence", "reasoning"]
+
+    for pred_text, label_text in zip(preds_text, labels):
+        pred_obj, _ = extract_first_balanced_json(pred_text)
+        label_obj, _ = extract_first_balanced_json(label_text)
+
+        if pred_obj:
+            json_valid += 1
+
+            if list(pred_obj.keys()) == expected_output_keys:
+                key_ok += 1
+
+            checks = [
+                isinstance(pred_obj.get("show_name"), str) and bool(pred_obj.get("show_name")),
+                _int_or_null(pred_obj.get("season")),
+                _int_or_null(pred_obj.get("episode")),
+                _crc_valid(pred_obj.get("crc_hash")),
+                isinstance(pred_obj.get("confidence"), (int, float))
+                and 0.0 <= float(pred_obj["confidence"]) <= 1.0,
+                isinstance(pred_obj.get("reasoning"), str),
+            ]
+            if all(checks):
+                type_ok += 1
+            if pred_obj.get("episode") is not None:
+                ep_present += 1
+            if _crc_valid(pred_obj.get("crc_hash")):
+                crc_ok += 1
+            if label_obj and pred_obj == label_obj:
+                exact += 1
+
+    return {
+        "json_validity": json_valid / total,
+        "key_order_match": key_ok / total,
+        "field_type_valid": type_ok / total,
+        "episode_present": ep_present / total,
+        "crc_format": crc_ok / total,
+        "exact_json_match": exact / total,
+    }
 
 
 # -----------------------
@@ -470,7 +705,7 @@ def find_lora_target_modules(model) -> List[str]:
 # -----------------------
 # Main training pipeline
 # -----------------------
-def main() -> None:
+def main() -> None:  # pragma: no cover
     """
     Main training function that orchestrates the entire pipeline.
     
@@ -500,6 +735,10 @@ def main() -> None:
     df = load_and_clean_csv(cfg.csv_path)
     print_descriptive_stats(df)  # Print stats to verify data quality
 
+    # Data quality checks (informational)
+    issues = detect_data_issues(df)
+    print_data_issues(issues)
+
     # ============================================
     # Step 2: Optional data filtering
     # ============================================
@@ -509,7 +748,7 @@ def main() -> None:
         before = len(df)
         df = df[df["episode"].notna()].copy()  # Keep only rows with non-null episode
         after = len(df)
-        print(f"\n[INFO] require_episode=True: filtered rows {before} -> {after}")
+        logger.info("require_episode=True: filtered rows %d -> %d", before, after)
         if after == 0:
             raise RuntimeError(
                 "After cleaning, there are 0 rows with a non-null episode. "
@@ -523,7 +762,7 @@ def main() -> None:
     if cfg.write_clean_csv:
         Path(cfg.clean_csv_path).parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(cfg.clean_csv_path, index=False, encoding="utf-8")
-        print(f"[INFO] Wrote cleaned CSV: {cfg.clean_csv_path}")
+        logger.info("Wrote cleaned CSV: %s", cfg.clean_csv_path)
 
     # ============================================
     # Step 4: Build HuggingFace Dataset from pandas
@@ -552,6 +791,12 @@ def main() -> None:
     train_ds = train_ds.remove_columns([c for c in train_ds.column_names if c != "text"])
     eval_ds = eval_ds.remove_columns([c for c in eval_ds.column_names if c != "text"])
 
+    # Optionally cap eval set size to reduce evaluation memory/time
+    if cfg.eval_max_samples is not None:
+        cap = min(cfg.eval_max_samples, len(eval_ds))
+        eval_ds = eval_ds.select(range(cap))
+        logger.info("Capped eval set to %d samples", cap)
+
     # ============================================
     # Step 5: Load model and tokenizer
     # ============================================
@@ -574,7 +819,7 @@ def main() -> None:
     # Automatically discover which layers to apply LoRA to
     # LoRA only trains small adapter matrices, not the full model weights
     target_modules = find_lora_target_modules(model)
-    print(f"[INFO] LoRA target_modules = {target_modules}")
+    logger.info("LoRA target_modules = %s", target_modules)
     if not target_modules:
         raise RuntimeError("Could not discover LoRA target modules. Inspect model.named_modules().")
 
@@ -613,6 +858,8 @@ def main() -> None:
         per_device_train_batch_size=cfg.per_device_train_batch_size,  # 1 example per GPU
         gradient_accumulation_steps=cfg.gradient_accumulation_steps,  # Accumulate over 8 steps
         # So effective batch size = 1 * 8 = 8
+        per_device_eval_batch_size=cfg.per_device_eval_batch_size,  # Keep eval tiny for stability
+        eval_accumulation_steps=cfg.eval_accumulation_steps,  # Avoid holding many logits
 
         # Learning rate and schedule
         learning_rate=cfg.learning_rate,  # 2e-4 is standard for LoRA
@@ -626,6 +873,12 @@ def main() -> None:
         eval_strategy="steps",  # Evaluate during training (not just at end)
         eval_steps=cfg.eval_steps,  # Evaluate every 200 steps
         save_total_limit=cfg.save_total_limit,  # Keep only last 2 checkpoints
+        load_best_model_at_end=True,
+        metric_for_best_model="json_validity",
+        greater_is_better=True,
+        predict_with_generate=True,  # Ensure eval uses generated completions for metrics
+        generation_max_length=cfg.max_seq_length,
+        generation_num_beams=1,
 
         # Mixed precision training (reduces memory usage)
         bf16=(dtype == torch.bfloat16),  # Use bfloat16 if supported
@@ -652,6 +905,7 @@ def main() -> None:
         max_seq_length=cfg.max_seq_length,  # Maximum sequence length
         packing=cfg.packing,  # Pack multiple examples into one sequence (better GPU utilization)
         args=args,  # Training arguments
+        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, tokenizer),
     )
 
     # ============================================
@@ -677,8 +931,9 @@ def main() -> None:
     trainer.model.save_pretrained(cfg.output_dir)
     tokenizer.save_pretrained(cfg.output_dir)
 
-    print(f"\nTraining complete in {(t1 - t0) / 60.0:.2f} minutes")
-    print(f"Saved adapters + tokenizer to: {cfg.output_dir}")
+    logger.info("Training complete in %.2f minutes", (t1 - t0) / 60.0)
+    logger.info("Saved adapters + tokenizer to: %s", cfg.output_dir)
+    write_run_metadata(cfg.output_dir, cfg)
 
 
 if __name__ == "__main__":

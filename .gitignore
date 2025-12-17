@@ -201,6 +201,7 @@ $RECYCLE.BIN/
 *.pem
 *.p12
 *.pfx
+.cursor/
 secrets.yaml
 config.local.yaml
 

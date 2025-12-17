@@ -55,20 +55,11 @@ source .venv/bin/activate  # Linux/macOS
 
 See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions.
 
-**Quick install:**
+**Quick install (Windows, CUDA 12.8):**
 ```bash
-# Install PyTorch with CUDA 12.8 support
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
-
-# Install core dependencies
-pip install transformers>=4.51.0 datasets peft accelerate bitsandbytes trl ninja packaging
-
-# Install Unsloth (see INSTALLATION.md for Windows-specific installation method)
-pip install "unsloth[cu12]"
-
-# Verify xformers installation
-python -m xformers.info
+make install
 ```
+This uses `.venv\\Scripts\\pip.exe`, installs Torch from the CUDA 12.8 index, core deps, and Unsloth.
 
 ### 4. Verify Installation
 
@@ -128,15 +119,18 @@ LLM_Fine_Tuning/
 
 3. **Run training**:
    ```bash
-   python sft_qwen3_metadata.py
+   make train
    ```
-   
-   Training takes approximately 40 minutes on an RTX 4090.
+   Notes:
+   - Uses `.venv\\Scripts\\python.exe`.
+   - Sets `CUDA_LAUNCH_BLOCKING=1` and `PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128` for more helpful CUDA error surfacing on Windows.
+   - Training takes ~40 minutes on an RTX 4090.
 
 4. **Validate the model**:
    ```bash
-   python infer_validate.py
+   make validate
    ```
+   The validator now builds prompts with the tokenizer chat template (with fallback), uses structured logging, and retries generation with multiple temperature/top-p settings. It stops early only on balanced JSON, not on chat tags.
 
 ### Converting to Ollama Format
 
@@ -187,6 +181,9 @@ class CFG:
     gradient_accumulation_steps: int = 8  # Effective batch size = 8
     learning_rate: float = 2e-4
     num_train_epochs: float = 3.0
+    per_device_eval_batch_size: int = 1   # small eval batches to avoid OOM
+    eval_accumulation_steps: int = 1      # low accumulation to reduce eval memory
+    eval_max_samples: Optional[int] = None  # cap eval set if needed for memory/time
     
     # Data
     csv_path: str = "./inputs/filename_metadata.csv"
@@ -195,6 +192,12 @@ class CFG:
 ```
 
 Modify these values to adjust training behavior.
+
+Additional training script behavior:
+- Structured logging (replaces print) and run metadata capture (git SHA, timestamp, config) written to `outputs/sft_model/run_metadata.json`.
+- Data quality checks (`detect_data_issues`/`print_data_issues`) run before training.
+- Custom metrics during eval (`json_validity`, key order/type checks, episode/CRC presence, exact match) with `load_best_model_at_end=True`.
+- Eval is memory-safe by default (tiny eval batch, low accumulation, optional eval capping).
 
 ## 🧪 Testing
 
@@ -244,7 +247,7 @@ This script tests the model on hardcoded edge cases (difficult filenames with va
 ### Training Issues
 - **No LoRA modules found**: Check model architecture compatibility. The script auto-discovers target modules (q_proj, k_proj, v_proj, etc.)
 - **Data loading errors**: Verify CSV schema matches expected columns (`name`, `show_name`, `season`, `episode`, `reasoning`, `confidence`, `crc_hash`)
-- **Validation fails**: Check that prompts are correctly formatted and contain `{filename}` placeholder in user prompt
+- **Validation fails**: Check that prompts are correctly formatted and contain `{filename}` placeholder in user prompt. The validator now uses the tokenizer chat template (with fallback) and retries generation; if failures persist, review the system prompt (confidence rules, JSON-only output) and consider lowering `MAX_NEW_TOKENS` or adjusting retry temps/top-p.
 - **Episode filtering removes all data**: Set `require_episode=False` in config if your data doesn't have episode numbers
 
 ## 📚 Documentation

@@ -29,12 +29,12 @@ https://github.com/ggml-org/llama.cpp/releases
 
 ### Create a GGUF from the SFT
 ```shell
-python D:\Languages\llama\llama.cpp-b7415\convert_hf_to_gguf.py D:\Documents\Code\LLM_Fine_Tuning\outputs\merged_hf_model --outfile D:\Documents\Code\LLM_Fine_Tuning\outputs\qwen3-animemetadata-f16.gguf --outtype f16
+python D:\Languages\llama\llama.cpp-b7415\convert_hf_to_gguf.py D:\Documents\Code\LLM_Fine_Tuning\outputs\merged_hf_model --outfile D:\Documents\Code\LLM_Fine_Tuning\outputs\qwen3-filemetadata-f16.gguf --outtype f16
 ```
 
 ### Quantize the model
 ```shell
-D:\Languages\llama\llama-b7415-bin-win-cuda-12.4-x64\llama-quantize.exe D:\Documents\Code\LLM_Fine_Tuning\outputs\qwen3-animemetadata-f16.gguf D:\Documents\Code\LLM_Fine_Tuning\outputs\qwen3-animemetadata-q4_k_m.gguf Q4_K_M
+D:\Languages\llama\llama-b7415-bin-win-cuda-12.4-x64\llama-quantize.exe D:\Documents\Code\LLM_Fine_Tuning\outputs\qwen3-filemetadata-f16.gguf D:\Documents\Code\LLM_Fine_Tuning\outputs\qwen3-filemetadata-q4_k_m.gguf Q4_K_M
 ```
 
 ### Create the Modelfile pointing to the GGUF
@@ -42,7 +42,7 @@ D:\Languages\llama\llama-b7415-bin-win-cuda-12.4-x64\llama-quantize.exe D:\Docum
 ### Create the ollama entry
 
 ```shell
-ollama create qwen3-animemetadata -f Modelfile
+ollama create qwen3-filemetadata -f Modelfile
 ```
 
 ### Use the model in ollama
