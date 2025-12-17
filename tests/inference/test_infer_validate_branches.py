@@ -18,6 +18,10 @@ def test_build_inputs_handles_missing_pad_token():
 
         def apply_chat_template(self, messages, tokenize, add_generation_prompt, return_tensors):
             assert tokenize and add_generation_prompt and return_tensors == "pt"
+            assert messages == [
+                {"role": "system", "content": "sys"},
+                {"role": "user", "content": "user"},
+            ]
             return torch.tensor([[1, 2, 3]])
 
     out = iv.build_inputs(Tok(), "sys", "user")

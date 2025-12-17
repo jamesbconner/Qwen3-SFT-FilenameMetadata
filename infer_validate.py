@@ -99,10 +99,12 @@ def build_inputs(tokenizer, system: str, user: str) -> Dict[str, torch.Tensor]:
     Build model inputs using the tokenizer chat template when available.
     Falls back to the manual format used during training if the template is missing.
     """
+    # When add_generation_prompt=True, most chat templates append the assistant
+    # tag automatically. Passing an explicit assistant message would duplicate
+    # that tag and change the prompt structure, so only include system/user here.
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": user},
-        {"role": "assistant", "content": ""},
     ]
     if hasattr(tokenizer, "apply_chat_template"):
         tokenized = tokenizer.apply_chat_template(
