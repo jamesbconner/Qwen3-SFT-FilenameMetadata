@@ -33,3 +33,16 @@ def test_compute_metrics_empty_predictions():
     assert metrics["key_order_match"] == 0.0
     assert metrics["field_type_valid"] == 0.0
 
+
+def test_compute_metrics_logits_guard():
+    tok = DummyTok()
+    eval_pred = type(
+        "EP",
+        (),
+        {
+            "predictions": np.zeros((1, 2, 3), dtype=np.float32),
+            "label_ids": np.array([[1, 2]]),
+        },
+    )()
+    metrics = sft.compute_metrics(eval_pred, tok)
+    assert all(value == 0.0 for value in metrics.values())

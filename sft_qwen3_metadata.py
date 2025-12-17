@@ -406,8 +406,12 @@ def print_descriptive_stats(df: pd.DataFrame) -> None:
     print("\n" + "=" * 70)
     print("Dataset sanity checks (pandas)")
     print("=" * 70)
-    logger.info("rows: %d", len(df))
-    logger.info("null counts:\n%s", df.isna().sum().to_string())
+    rows_msg = f"rows: {len(df)}"
+    print(rows_msg)
+    logger.info(rows_msg)
+    null_counts_msg = f"null counts:\n{df.isna().sum().to_string()}"
+    print(null_counts_msg)
+    logger.info(null_counts_msg)
 
     # Episode distribution: show stats for non-null episodes
     # This helps identify if episodes are in a reasonable range (e.g., 1-100)
@@ -533,6 +537,18 @@ def _crc_valid(value: Any) -> bool:
     return value is None or (isinstance(value, str) and CRC_RE.fullmatch(value) is not None)
 
 
+def _zero_metrics() -> Dict[str, float]:
+    """Return zeroed metric dict (used when predictions are unusable)."""
+    return {
+        "json_validity": 0.0,
+        "key_order_match": 0.0,
+        "field_type_valid": 0.0,
+        "episode_present": 0.0,
+        "crc_format": 0.0,
+        "exact_json_match": 0.0,
+    }
+
+
 def compute_metrics(eval_pred: EvalPrediction, tokenizer) -> Dict[str, float]:
     """Compute task-specific JSON correctness metrics."""
     # Handle logits vs already-decoded strings
@@ -540,11 +556,23 @@ def compute_metrics(eval_pred: EvalPrediction, tokenizer) -> Dict[str, float]:
     if isinstance(preds, tuple):
         preds = preds[0]
     preds = np.array(preds)
+
+    # Trainer/SFTTrainer without predict_with_generate returns next-token logits,
+    # which are not decodable into the desired JSON completions. Guard and emit
+    # neutral metrics instead of misleading scores.
+    if preds.size == 0:
+        return _zero_metrics()
+    if preds.ndim == 3:
+        logger.warning(
+            "compute_metrics received logits with shape %s; set predict_with_generate=True "
+            "so metrics use generated completions.",
+            preds.shape,
+        )
+        return _zero_metrics()
+
     if preds.dtype.kind in {"U", "S", "O"}:  # already decoded strings
         preds_text = preds.tolist()
     else:
-        if preds.ndim == 3:  # [batch, seq_len, vocab]
-            preds = np.argmax(preds, axis=-1)
         preds = preds.astype(np.int64, copy=False)
         preds_text = tokenizer.batch_decode(preds, skip_special_tokens=True)
 
@@ -832,6 +860,9 @@ def main() -> None:  # pragma: no cover
         load_best_model_at_end=True,
         metric_for_best_model="json_validity",
         greater_is_better=True,
+        predict_with_generate=True,  # Ensure eval uses generated completions for metrics
+        generation_max_length=cfg.max_seq_length,
+        generation_num_beams=1,
 
         # Mixed precision training (reduces memory usage)
         bf16=(dtype == torch.bfloat16),  # Use bfloat16 if supported
