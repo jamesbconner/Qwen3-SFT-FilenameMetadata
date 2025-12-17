@@ -68,9 +68,13 @@ Hard rules:
    - Return the value in uppercase.
    - Otherwise set crc_hash to null.
 
-8) confidence:
-   - confidence must be a number between 0.0 and 1.0 inclusive.
-   - Use high confidence only when episode parsing is unambiguous.
+8) confidence (start from 1.0 and subtract):
+   - -0.0 when season and episode have explicit markers (SxxExx, E## after clear separator).
+   - -0.1 when episode versioning exists (e.g., E01v2 → episode=1, subtract 0.1).
+   - -0.1 when season does not exist (season is null).
+   - -0.15 to -0.25 when episode is inferred (no explicit marker; choose within this range based on ambiguity).
+   - -0.8 when no episode exists (episode=null because no marker or non-episode asset).
+   - Clamp to [0.0, 1.0].
 
 9) reasoning:
    - Provide a brief explanation of which patterns were used.
