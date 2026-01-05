@@ -38,7 +38,7 @@ This project trains a large language model (Qwen3 14B) to extract structured met
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/jamesbconner/TableSleuth.git
 cd LLM_Fine_Tuning
 ```
 
